@@ -429,18 +429,19 @@ class ClassicalCalculator(base.HazardCalculator):
         """
         oq = self.oqparam
         src_groups = self.csm.src_groups
-        totweight = 0
+        tot_weight = 0
         et_ids = self.datastore['et_ids'][:]
         rlzs_by_gsim_list = self.full_lt.get_rlzs_by_gsim_list(et_ids)
         for rlzs_by_gsim, sg in zip(rlzs_by_gsim_list, src_groups):
             for src in sg:
                 src.ngsims = len(rlzs_by_gsim)
-                totweight += src.weight
+                tot_weight += src.weight
                 if src.code == b'C' and src.num_ruptures > 20_000:
                     msg = ('{} is suspiciously large, containing {:_d} '
                            'ruptures with complex_fault_mesh_spacing={} km')
                     spc = oq.complex_fault_mesh_spacing
                     logging.info(msg.format(src, src.num_ruptures, spc))
+        min_weight = min(numpy.ceil(tot_weight / 3200), oq.min_weight)
         assert oq.max_sites_per_tile > oq.max_sites_disagg, (
             oq.max_sites_per_tile, oq.max_sites_disagg)
         hint = 1 if self.N <= oq.max_sites_disagg else numpy.ceil(
@@ -459,19 +460,19 @@ class ClassicalCalculator(base.HazardCalculator):
         C = oq.concurrent_tasks or 1
         if oq.disagg_by_src or oq.is_ucerf():
             f1, f2 = classical, classical
-            max_weight = max(totweight / C, oq.min_weight) / 5
+            max_weight = max(tot_weight / C, min_weight) / 5
         else:
             f1, f2 = classical, classical_split_filter
-            max_weight = max(totweight / C, oq.min_weight)
+            max_weight = max(tot_weight / C, min_weight)
         logging.info('tot_weight={:_d}, max_weight={:_d}'.format(
-            int(totweight), int(max_weight)))
+            int(tot_weight), int(max_weight)))
         param = dict(
             truncation_level=oq.truncation_level,
             imtls=oq.imtls, reqv=oq.get_reqv(),
             pointsource_distance=getattr(oq.pointsource_distance, 'ddic', {}),
             point_rupture_bins=oq.point_rupture_bins,
             shift_hypo=oq.shift_hypo,
-            min_weight=oq.min_weight, max_weight=max_weight,
+            min_weight=min_weight, max_weight=max_weight,
             collapse_level=oq.collapse_level, hint=hint,
             max_sites_disagg=oq.max_sites_disagg,
             split_sources=oq.split_sources, af=self.af)
