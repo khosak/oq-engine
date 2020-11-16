@@ -215,15 +215,14 @@ class ContextMaker(object):
         ctx.ctxs = ctxs
         return ctx
 
-    def gen_ctx_poes(self, ctxs):
+    def gen_ctx_poes(self, ctxs, poes):
         """
         :param ctxs: a list of C context objects
         :yields: C pairs (ctx, poes of shape (N, L, G))
         """
         nsites = numpy.array([len(ctx.sids) for ctx in ctxs])
-        C = len(ctxs)
         N = nsites.sum()
-        poes = numpy.zeros((N, len(self.loglevels.array), len(self.gsims)))
+        C = len(ctxs)
         if self.single_site_opt.any():
             ctx = self.multi(ctxs)
         for g, gsim in enumerate(self.gsims):
@@ -235,7 +234,7 @@ class ContextMaker(object):
                     mean_std = gsim.get_mean_std(ctxs, self.imts)
             with self.poe_mon:
                 # builds poes of shape (N, L, G)
-                poes[:, :, g] = gsim.get_poes(
+                poes[:N, :, g] = gsim.get_poes(
                     mean_std, self.loglevels, self.trunclevel, self.af, ctxs)
         s = 0
         for ctx, n in zip(ctxs, nsites):
@@ -514,7 +513,7 @@ class PmapMaker(object):
         self.ir_mon = cmaker.mon('iter_ruptures', measuremem=False)
         # NB: if maxsites is too big or too small the performance of
         # get_poes can easily become 2-3 times worse!
-        self.maxsites = 512000 / len(self.gsims) / len(self.imtls.array)
+        self.maxsites = int(512000 / len(self.gsims) / len(self.imtls.array))
 
     def _update_pmap(self, ctxs, pmap=None):
         # compute PoEs and update pmap
@@ -523,9 +522,11 @@ class PmapMaker(object):
         rup_indep = self.rup_indep
         # splitting in blocks makes sure that the maximum poes array
         # generated has size N x L x G x 8 = 4 MB
+        arr = numpy.zeros((self.maxsites, len(self.loglevels.array),
+                           len(self.gsims)))
         for block in block_splitter(
                 ctxs, self.maxsites, lambda ctx: len(ctx.sids)):
-            for ctx, poes in self.cmaker.gen_ctx_poes(block):
+            for ctx, poes in self.cmaker.gen_ctx_poes(block, arr):
                 with self.pne_mon:
                     # pnes and poes of shape (N, L, G)
                     pnes = ctx.get_probability_no_exceedance(poes)
