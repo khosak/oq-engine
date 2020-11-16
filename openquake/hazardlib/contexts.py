@@ -215,7 +215,7 @@ class ContextMaker(object):
         ctx.ctxs = ctxs
         return ctx
 
-    def gen_ctx_poes(self, ctxs, poes):
+    def gen_ctx_poes(self, ctxs):
         """
         :param ctxs: a list of C context objects
         :yields: C pairs (ctx, poes of shape (N, L, G))
@@ -223,6 +223,9 @@ class ContextMaker(object):
         nsites = numpy.array([len(ctx.sids) for ctx in ctxs])
         N = nsites.sum()
         C = len(ctxs)
+        if len(self.poes) < N:
+            self.poes = numpy.zeros(
+                (N, len(self.loglevels.array), len(self.gsims)))
         if self.single_site_opt.any():
             ctx = self.multi(ctxs)
         for g, gsim in enumerate(self.gsims):
@@ -234,11 +237,11 @@ class ContextMaker(object):
                     mean_std = gsim.get_mean_std(ctxs, self.imts)
             with self.poe_mon:
                 # builds poes of shape (N, L, G)
-                poes[:N, :, g] = gsim.get_poes(
+                self.poes[:N, :, g] = gsim.get_poes(
                     mean_std, self.loglevels, self.trunclevel, self.af, ctxs)
         s = 0
         for ctx, n in zip(ctxs, nsites):
-            yield ctx, poes[s:s+n]
+            yield ctx, slice(s, s + n)
             s += n
 
     def get_ctx_params(self):
@@ -522,14 +525,14 @@ class PmapMaker(object):
         rup_indep = self.rup_indep
         # splitting in blocks makes sure that the maximum poes array
         # generated has size N x L x G x 8 = 4 MB
-        arr = numpy.zeros((self.maxsites, len(self.loglevels.array),
-                           len(self.gsims)))
+        self.cmaker.poes = poes = numpy.zeros(
+            (self.maxsites, len(self.loglevels.array), len(self.gsims)))
         for block in block_splitter(
                 ctxs, self.maxsites, lambda ctx: len(ctx.sids)):
-            for ctx, poes in self.cmaker.gen_ctx_poes(block, arr):
+            for ctx, slc in self.cmaker.gen_ctx_poes(block):
                 with self.pne_mon:
                     # pnes and poes of shape (N, L, G)
-                    pnes = ctx.get_probability_no_exceedance(poes)
+                    pnes = ctx.get_probability_no_exceedance(poes[slc])
                     for sid, pne in zip(ctx.sids, pnes):
                         probs = pmap.setdefault(sid, rup_indep).array
                         if rup_indep:
