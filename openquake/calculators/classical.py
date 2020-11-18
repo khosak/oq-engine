@@ -81,7 +81,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     """
     Compute the PoEs from filtered sources.
     """
-    blocks = list(block_splitter(sources, params['max_weight']/8, get_weight))
+    blocks = list(block_splitter(sources, params['max_weight']/5, get_weight))
     some = []
     some.extend(blocks[0])
     if len(blocks) > 1:
@@ -99,7 +99,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
         yield classical(rest, rlzs_by_gsim, params, monitor)
         return
     # otherwise spawn subtasks
-    weights = [b.weight for b in others]
+    weights = [int(b.weight) for b in others]
     msg = 'produced %d subtask(s) with weights %s' % (len(others), weights)
     try:
         logs.dbcmd(
