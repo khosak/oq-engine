@@ -82,21 +82,26 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     Compute the PoEs from filtered sources.
     """
     blocks = list(block_splitter(sources, params['max_weight']/5, get_weight))
-    if len(blocks) == 1:
-        yield classical(sources, rlzs_by_gsim, params, monitor)
-        return
+    some = []
+    some.extend(blocks[0])
+    if len(blocks) > 1:
+        some.extend(blocks[-1])  # usually the last block is small
+    others = blocks[1:-1]
     t0 = time.time()
-    yield classical(blocks[0], rlzs_by_gsim, params, monitor)
+    yield classical(some, rlzs_by_gsim, params, monitor)
     dt = time.time() - t0
-    if dt < params['task_timeout']:  # do everything in the current task
+    print('time/timeout', dt, params['task_timeout'])
+    if not others:
+        return
+    elif dt < params['task_timeout']:  # do everything in the current task
         rest = []
-        for blk in blocks[1:]:
-            rest.extend(blk)
+        for other in others:
+            rest.extend(other)
         yield classical(rest, rlzs_by_gsim, params, monitor)
         return
     # otherwise spawn subtasks
-    weights = [b.weight for b in blocks[1:]]
-    msg = 'produced %d subtask(s) with weights %s' % (len(blocks[1:]), weights)
+    weights = [b.weight for b in others]
+    msg = 'produced %d subtask(s) with weights %s' % (len(others), weights)
     try:
         logs.dbcmd(
             'log', monitor.calc_id, datetime.utcnow(), 'DEBUG',
@@ -104,7 +109,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     except Exception:
         # a foreign key error in case of `oq run` is expected
         print(msg)
-    for block in blocks[1:]:
+    for block in others:
         yield classical, block, rlzs_by_gsim, params
 
 
