@@ -81,7 +81,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     """
     Compute the PoEs from filtered sources.
     """
-    blocks = list(block_splitter(sources, params['max_weight']/5, get_weight))
+    blocks = list(block_splitter(sources, params['max_weight']/8, get_weight))
     some = []
     some.extend(blocks[0])
     if len(blocks) > 1:
@@ -90,7 +90,6 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     t0 = time.time()
     yield classical(some, rlzs_by_gsim, params, monitor)
     dt = time.time() - t0
-    print('time/timeout', int(dt), int(params['task_timeout']))
     if not others:
         return
     elif dt < params['task_timeout']:  # do everything in the current task
