@@ -81,30 +81,31 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     """
     Compute the PoEs from filtered sources.
     """
-    minw = params['min_weight']
-    maxw = params['max_weight'] / 2
-    blocks = list(block_splitter(sources, maxw, get_weight))
-    if not blocks:
-        yield {'pmap': {}, 'extra': {}}
+    blocks = list(block_splitter(sources, params['max_weight']/5, get_weight))
+    if len(blocks) == 1:
+        yield classical(sources, rlzs_by_gsim, params, monitor)
         return
-    heavy = []
-    light = list(blocks[-1])
-    for block in blocks[:-1]:
-        if block.weight < minw:  # extend light sources
-            light.extend(block)
-        else:  # heavy block, turn it into a subtask
-            heavy.append(int(block.weight))
-            yield classical, block, rlzs_by_gsim, params
-    if heavy:
-        msg = 'produced %d subtask with weights %s' % (len(heavy), heavy)
-        try:
-            logs.dbcmd(
-                'log', monitor.calc_id, datetime.utcnow(), 'DEBUG',
-                'classical_split_filter#%d' % monitor.task_no, msg)
-        except Exception:
-            # a foreign key error in case of `oq run` is expected
-            print(msg)
-    yield classical(light, rlzs_by_gsim, params, monitor)
+    t0 = time.time()
+    yield classical(blocks[0], rlzs_by_gsim, params, monitor)
+    dt = time.time() - t0
+    if dt < params['task_timeout']:  # do everything in the current task
+        rest = []
+        for blk in blocks[1:]:
+            rest.extend(blk)
+        yield classical(rest, rlzs_by_gsim, params, monitor)
+        return
+    # otherwise spawn subtasks
+    weights = [b.weight for b in blocks[1:]]
+    msg = 'produced %d subtask(s) with weights %s' % (len(blocks[1:]), weights)
+    try:
+        logs.dbcmd(
+            'log', monitor.calc_id, datetime.utcnow(), 'DEBUG',
+            'classical_split_filter#%d' % monitor.task_no, msg)
+    except Exception:
+        # a foreign key error in case of `oq run` is expected
+        print(msg)
+    for block in blocks[1:]:
+        yield classical, block, rlzs_by_gsim, params
 
 
 def preclassical(srcs, params, monitor):
@@ -473,6 +474,7 @@ class ClassicalCalculator(base.HazardCalculator):
             f1, f2 = classical, classical_split_filter
             max_weight = max(tot_weight / C, oq.min_weight)
         self.params['max_weight'] = max_weight
+        self.params['task_timeout'] = .1 * tot_weight ** .3333333
         logging.info('tot_weight={:_d}, max_weight={:_d}'.format(
             int(tot_weight), int(max_weight)))
         for rlzs_by_gsim, sg in zip(rlzs_by_gsim_list, src_groups):
