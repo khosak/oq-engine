@@ -23,7 +23,6 @@ import psutil
 import pprint
 import logging
 import operator
-from datetime import datetime
 import numpy
 try:
     from PIL import Image
@@ -81,35 +80,8 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     """
     Compute the PoEs from filtered sources.
     """
-    blocks = list(block_splitter(sources, params['max_weight']/8, get_weight))
-    some = []
-    some.extend(blocks[0])
-    if len(blocks) > 1:
-        some.extend(blocks[-1])  # usually the last block is small
-    others = blocks[1:-1]
-    t0 = time.time()
-    yield classical(some, rlzs_by_gsim, params, monitor)
-    dt = time.time() - t0
-    if not others:
-        return
-    elif dt < params['task_timeout']:  # do everything in the current task
-        rest = []
-        for other in others:
-            rest.extend(other)
-        yield classical(rest, rlzs_by_gsim, params, monitor)
-        return
-    # otherwise spawn subtasks
-    weights = [int(b.weight) for b in others]
-    msg = 'produced %d subtask(s) with weights %s' % (len(others), weights)
-    try:
-        logs.dbcmd(
-            'log', monitor.calc_id, datetime.utcnow(), 'DEBUG',
-            'classical_split_filter#%d' % monitor.task_no, msg)
-    except Exception:
-        # a foreign key error in case of `oq run` is expected
-        print(msg)
-    for block in others:
-        yield classical, block, rlzs_by_gsim, params
+    yield from parallel.split_task(classical, sources, rlzs_by_gsim, params,
+                                   monitor, duration=params['task_timeout'])
 
 
 def preclassical(srcs, params, monitor):
@@ -478,9 +450,9 @@ class ClassicalCalculator(base.HazardCalculator):
             f1, f2 = classical, classical_split_filter
             max_weight = max(tot_weight / C, oq.min_weight)
         self.params['max_weight'] = max_weight
-        self.params['task_timeout'] = .1 * tot_weight ** .3333333
-        logging.info('tot_weight={:_d}, max_weight={:_d}'.format(
-            int(tot_weight), int(max_weight)))
+        self.params['task_timeout'] = t = .1 * tot_weight ** .3333333
+        logging.info('tot_weight={:_d}, max_weight={:_d}, task_timeout={:_d}'.
+                     format(int(tot_weight), int(max_weight), int(t)))
         for rlzs_by_gsim, sg in zip(rlzs_by_gsim_list, src_groups):
             nb = 0
             if sg.atomic:

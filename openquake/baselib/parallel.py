@@ -912,6 +912,11 @@ def split_task(func, *args, duration=1000,
     dt = (time.time() - t0) / first_weight  # time per unit of weight
     yield res
     blocks = list(block_splitter(other, duration, lambda el: weight(el) * dt))
+    if len(blocks) > 1:
+        weights = [round(b.weight, 2) for b in blocks[:-1]]
+        msg = 'produced %d subtask(s) with weights %s' % (
+            len(weights), weights)
+        print(msg)
     for block in blocks[:-1]:
         yield (func, block) + args[1:-1]
     yield func(*(blocks[-1],) + args[1:])
