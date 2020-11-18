@@ -90,7 +90,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     t0 = time.time()
     yield classical(some, rlzs_by_gsim, params, monitor)
     dt = time.time() - t0
-    print('time/timeout', dt, params['task_timeout'])
+    print('time/timeout', int(dt), int(params['task_timeout']))
     if not others:
         return
     elif dt < params['task_timeout']:  # do everything in the current task
@@ -491,7 +491,7 @@ class ClassicalCalculator(base.HazardCalculator):
             else:  # regroup the sources in blocks
                 blks = (groupby(sg, get_source_id).values()
                         if oq.disagg_by_src
-                        else block_splitter(sg, 2 * max_weight,
+                        else block_splitter(sg, max_weight,
                                             get_weight, sort=True))
                 blocks = list(blks)
                 nb += len(blocks)
