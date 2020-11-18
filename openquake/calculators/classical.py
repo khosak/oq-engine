@@ -81,7 +81,7 @@ def classical_split_filter(sources, rlzs_by_gsim, params, monitor):
     """
     Compute the PoEs from filtered sources.
     """
-    blocks = list(block_splitter(sources, params['max_weight']/5, get_weight))
+    blocks = list(block_splitter(sources, params['max_weight']/8, get_weight))
     some = []
     some.extend(blocks[0])
     if len(blocks) > 1:
@@ -490,7 +490,7 @@ class ClassicalCalculator(base.HazardCalculator):
             else:  # regroup the sources in blocks
                 blks = (groupby(sg, get_source_id).values()
                         if oq.disagg_by_src
-                        else block_splitter(sg, max_weight,
+                        else block_splitter(sg, max_weight * 2,
                                             get_weight, sort=True))
                 blocks = list(blks)
                 nb += len(blocks)
