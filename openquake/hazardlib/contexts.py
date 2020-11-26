@@ -210,33 +210,6 @@ class ContextMaker(object):
         ctx.ctxs = ctxs
         return ctx
 
-    def gen_ctx_poes(self, ctxs):
-        """
-        :param ctxs: a list of C context objects
-        :yields: C pairs (ctx, poes of shape (N, L, G))
-        """
-        nsites = numpy.array([len(ctx.sids) for ctx in ctxs])
-        C = len(ctxs)
-        N = nsites.sum()
-        poes = numpy.zeros((N, len(self.loglevels.array), len(self.gsims)))
-        if self.single_site_opt.any():
-            ctx = self.multi(ctxs)
-        for g, gsim in enumerate(self.gsims):
-            with self.gmf_mon:
-                # builds mean_std of shape (2, N, M)
-                if self.single_site_opt[g] and C > 1 and (nsites == 1).all():
-                    mean_std = gsim.get_mean_std1(ctx, self.imts)
-                else:
-                    mean_std = gsim.get_mean_std(ctxs, self.imts)
-            with self.poe_mon:
-                # builds poes of shape (N, L, G)
-                poes[:, :, g] = gsim.get_poes(
-                    mean_std, self.loglevels, self.trunclevel, self.af, ctxs)
-        s = 0
-        for ctx, n in zip(ctxs, nsites):
-            yield ctx, poes[s:s+n]
-            s += n
-
     def get_ctx_params(self):
         """
         :returns: the interesting attributes of the context
@@ -533,6 +506,19 @@ class PmapMaker(object):
             nbytes += 8 * dparams * nsites
         return nbytes
 
+    def get_poes(self, ctx):
+        NLG = len(ctx.sids), len(self.loglevels.array), len(self.gsims)
+        poes = numpy.zeros(NLG)
+        for g, gsim in enumerate(self.gsims):
+            with self.gmf_mon:
+                # builds mean_std of shape (2, N, M)
+                mean_std = gsim.get_mean_std([ctx], self.imts)
+            with self.poe_mon:
+                # builds poes of shape (N, L, G)
+                poes[:, :, g] = gsim.get_poes(
+                    mean_std, self.loglevels, self.trunclevel, self.af, [ctx])
+        return poes
+
     def _update_pmap(self, ctxs, pmap=None):
         # compute PoEs and update pmap
         if pmap is None:  # for src_indep
@@ -540,19 +526,17 @@ class PmapMaker(object):
         rup_indep = self.rup_indep
         # splitting in blocks makes sure that the maximum poes array
         # generated has size N x L x G x 8 = 4 MB
-        for block in block_splitter(
-                ctxs, self.maxsites, lambda ctx: len(ctx.sids)):
-            print(humansize(self.count_bytes(block)))
-            for ctx, poes in self.cmaker.gen_ctx_poes(block):
-                with self.pne_mon:
-                    # pnes and poes of shape (N, L, G)
-                    pnes = ctx.get_probability_no_exceedance(poes)
-                    for sid, pne in zip(ctx.sids, pnes):
-                        probs = pmap.setdefault(sid, rup_indep).array
-                        if rup_indep:
-                            probs *= pne
-                        else:  # rup_mutex
-                            probs += (1. - pne) * ctx.weight
+        for ctx in ctxs:
+            poes = self.get_poes(ctx)
+            with self.pne_mon:
+                # pnes and poes of shape (N, L, G)
+                pnes = ctx.get_probability_no_exceedance(poes)
+                for sid, pne in zip(ctx.sids, pnes):
+                    probs = pmap.setdefault(sid, rup_indep).array
+                    if rup_indep:
+                        probs *= pne
+                    else:  # rup_mutex
+                        probs += (1. - pne) * ctx.weight
 
     def _ruptures(self, src, filtermag=None):
         return src.iter_ruptures(
