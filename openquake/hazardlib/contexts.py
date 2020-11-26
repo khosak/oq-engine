@@ -29,7 +29,7 @@ from scipy.interpolate import interp1d
 
 from openquake.baselib import hdf5, parallel
 from openquake.baselib.general import (
-    AccumDict, DictArray, groupby, block_splitter)
+    AccumDict, DictArray, groupby, block_splitter, humansize)
 from openquake.baselib.performance import Monitor
 from openquake.hazardlib import imt as imt_module
 from openquake.hazardlib.tom import PoissonTOM
@@ -542,7 +542,7 @@ class PmapMaker(object):
         # generated has size N x L x G x 8 = 4 MB
         for block in block_splitter(
                 ctxs, self.maxsites, lambda ctx: len(ctx.sids)):
-            print(self.count_bytes(block))
+            print(humansize(self.count_bytes(block)))
             for ctx, poes in self.cmaker.gen_ctx_poes(block):
                 with self.pne_mon:
                     # pnes and poes of shape (N, L, G)
