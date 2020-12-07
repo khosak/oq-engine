@@ -58,12 +58,12 @@ def calc_risk(gmfs, param, monitor):
         crmodel = monitor.read('crmodel')
         weights = dstore['weights'][()]
     L = len(param['lba'].loss_names)
-    elt_dt = [('event_id', U32), ('loss', (F32, (L,)))]
+    elt_dt = [('event_id', U32), ('loss', (F64, (L,)))]
     # aggkey -> eid -> loss
     acc = dict(events_per_sid=0, numlosses=numpy.zeros(2, int))  # (kept, tot)
     lba = param['lba']
     lba.alt = general.AccumDict(  # idx -> eid -> loss
-        accum=general.AccumDict(accum=numpy.zeros(L, F32)))
+        accum=general.AccumDict(accum=numpy.zeros(L, F64)))
     tempname = param['tempname']
     aggby = param['aggregate_by']
 
@@ -196,7 +196,7 @@ class EbriskCalculator(event_based.EventBasedCalculator):
             logging.warning('The calculation is really big; consider setting '
                             'minimum_asset_loss')
 
-        elt_dt = [('event_id', U32), ('loss', (F32, (L,)))]
+        elt_dt = [('event_id', U32), ('loss', (F64, (L,)))]
         for idxs, attrs in get_pairs(self.assetcol.tagcol, oq.aggregate_by):
             idx = ','.join(map(str, idxs)) + ','
             self.datastore.create_dset('event_loss_table/' + idx, elt_dt,
