@@ -20,6 +20,7 @@ import operator
 import itertools
 from datetime import datetime
 import numpy
+import pandas
 
 from openquake.baselib import datastore, hdf5, parallel, general
 from openquake.baselib.python3compat import zip
@@ -57,13 +58,13 @@ def calc_risk(gmfs, param, monitor):
     with monitor('getting crmodel'):
         crmodel = monitor.read('crmodel')
         weights = dstore['weights'][()]
-    L = len(param['lba'].loss_names)
-    elt_dt = [('event_id', U32), ('loss', (F32, (L,)))]
     # aggkey -> eid -> loss
     acc = dict(events_per_sid=0, numlosses=numpy.zeros(2, int))  # (kept, tot)
     lba = param['lba']
-    lba.alt = general.AccumDict(  # idx -> eid -> loss
-        accum=general.AccumDict(accum=numpy.zeros(L, F32)))
+    eids = numpy.unique(gmfs['eid'])
+    dic = {ln: numpy.zeros(len(eids)) for ln in param['lba'].loss_names}
+    losses_df = pandas.DataFrame(dic, index=eids)
+    lba.alt = general.AccumDict(accum=losses_df)
     tempname = param['tempname']
     aggby = param['aggregate_by']
 
@@ -90,14 +91,13 @@ def calc_risk(gmfs, param, monitor):
             assets_by_taxo = get_assets_by_taxo(assets, tempname)  # fast
             out = get_output(crmodel, assets_by_taxo, haz)  # slow
         with mon_agg:
-            tagidxs = assets[aggby] if aggby else None
-            acc['numlosses'] += lba.aggregate(
-                out, haz['eid'], minimum_loss, tagidxs, ws)
+            for a, asset in enumerate(out.assets):
+                losses_df = pandas.DataFrame(
+                    {lt: out[lt][a] for lt in out.loss_types}, index=out.eids)
+                lba.aggregate(asset, losses_df, aggby, ws)
     if len(gmfs):
         acc['events_per_sid'] /= len(gmfs)
-    acc['alt'] = {idx: numpy.fromiter(  # already sorted by aid, ultra-fast
-        ((eid, loss) for eid, loss in lba.alt[idx].items()), elt_dt)
-                  for idx in lba.alt}
+    acc['alt'] = lba.alt
     if param['avg_losses']:
         acc['losses_by_A'] = param['lba'].losses_by_A * param['ses_ratio']
         # without resetting the cache the sequential avg_losses would be wrong!
@@ -264,7 +264,8 @@ class EbriskCalculator(event_based.EventBasedCalculator):
             return
         self.oqparam.ground_motion_fields = False  # hack
         with self.monitor('saving losses_by_event and event_loss_table'):
-            for idx, arr in dic['alt'].items():
+            for idx, df in dic['alt'].items():
+                import pdb; pdb.set_trace()
                 hdf5.extend(self.datastore['event_loss_table/' + idx], arr)
         if self.oqparam.avg_losses:
             with self.monitor('saving avg_losses'):

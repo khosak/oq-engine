@@ -1476,51 +1476,26 @@ class LossesByAsset(object):
         self.loss_names = loss_names
         self.lni = {ln: i for i, ln in enumerate(loss_names)}
 
-    def gen_losses(self, out):
-        """
-        :yields: pairs (loss_name_index, losses array of shape (A, E))
-        """
-        for lt in out.loss_types:
-            lratios = out[lt]  # shape (A, E)
-            losses = numpy.zeros_like(lratios)
-            avalues = (out.assets['occupants_None'] if lt == 'occupants'
-                       else out.assets['value-' + lt])
-            for a, avalue in enumerate(avalues):
-                losses[a] = avalue * lratios[a]
-            yield self.lni[lt], losses  # shape (A, E)
-            if lt in self.policy_dict:
-                ins_losses = numpy.zeros_like(lratios)
-                for a, asset in enumerate(out.assets):
-                    ded, lim = self.policy_dict[lt][asset[self.policy_name]]
-                    ins_losses[a] = insured_losses(
-                        losses[a], ded * avalues[a], lim * avalues[a])
-                yield self.lni[lt + '_ins'], ins_losses
-
-    def aggregate(self, out, eids, minimum_loss, tagidxs, ws):
+    def aggregate(self, asset, losses_df, aggby, ws):
         """
         Populate .losses_by_A and .alt
         """
-        numlosses = numpy.zeros(2, int)
-        for lni, losses in self.gen_losses(out):
-            if ws is not None:  # compute avg_losses, really fast
-                aids = out.assets['ordinal']
-                self.losses_by_A[aids, lni] += losses @ ws
-            for eid, loss in zip(eids, losses.sum(axis=0)):
-                self.alt[','][eid][lni] += loss
-            if tagidxs is not None:
-                # this is the slow part, depending on minimum_loss
-                for a, asset in enumerate(out.assets):
-                    ls = losses[a]
-                    ok = ls > minimum_loss[lni]
-                    if not ok.sum():
-                        continue
-                    idx = ','.join(map(str, tagidxs[a])) + ','
-                    kept = 0
-                    for loss, eid in zip(ls[ok], out.eids[ok]):
-                        self.alt[idx][eid][lni] += loss
-                        kept += 1
-                    numlosses += numpy.array([kept, len(losses[a])])
-        return numlosses
+        for lt in losses_df.columns:
+            avalue = (asset['occupants_None'] if lt == 'occupants'
+                      else asset['value-' + lt])
+            losses_df[lt] *= avalue
+            if lt in self.policy_dict:
+                ded, lim = self.policy_dict[lt][asset[self.policy_name]]
+                losses_df[lt + '_ins'] = insured_losses(
+                    losses_df[lt].to_numpy(), ded * avalue, lim * avalue)
+
+        if ws is not None:  # compute avg_losses, really fast
+            aid = asset['ordinal']
+            for lni, ln in enumerate(losses_df.columns):
+                self.losses_by_A[aid, lni] += losses_df[lt] @ ws
+        self.alt[','] += losses_df
+        if aggby:
+            self.alt[','.join(map(str, asset[aggby])) + ','] += losses_df
 
 
 # ####################### Consequences ##################################### #
