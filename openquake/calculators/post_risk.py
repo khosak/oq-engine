@@ -93,11 +93,11 @@ def post_ebrisk(dstore, aggkey, monitor):
     for ids in itertools.product(*agglist):
         key = ','.join(map(str, ids)) + ','
         try:
-            recs = dstore['event_loss_table/' + key][()]
+            df = dstore.read_df('event_loss_table/' + key, 'event_id')
         except (KeyError, dstore.EmptyDataset):   # no data
             continue
-        for rec in recs:
-            arr[rec['event_id']] += rec['loss']
+        for l, col in enumerate(df.columns):
+            arr[df.index, l] += df[col].to_numpy()
     builder = get_loss_builder(dstore)
     out = {}
     for rlz in numpy.unique(rlz_id):
