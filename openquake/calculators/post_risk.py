@@ -114,14 +114,14 @@ def get_src_loss_table(dstore, L):
     :returns:
         (source_ids, array of losses of shape (Ns, L))
     """
-    lbe = dstore['event_loss_table/,'][()]
+    lbe = dstore.read_df('event_loss_table/,', 'event_id')
     evs = dstore['events'][()]
-    rlz_ids = evs['rlz_id'][lbe['event_id']]
-    rup_ids = evs['rup_id'][lbe['event_id']]
+    rlz_ids = evs['rlz_id'][lbe.index]
+    rup_ids = evs['rup_id'][lbe.index]
     source_id = dstore['ruptures']['source_id'][rup_ids]
     w = dstore['weights'][:]
     acc = general.AccumDict(accum=numpy.zeros(L, F32))
-    for source_id, rlz_id, loss in zip(source_id, rlz_ids, lbe['loss']):
+    for source_id, rlz_id, loss in zip(source_id, rlz_ids, numpy.array(lbe)):
         acc[source_id] += loss * w[rlz_id]
     return zip(*sorted(acc.items()))
 
@@ -211,10 +211,8 @@ class PostRiskCalculator(base.RiskCalculator):
                     ] = dic['agg_losses']
                     ds['app_curves-rlzs'][:, r] += dic['agg_curves']  # PL
 
-        lbe = ds['event_loss_table/,'][()]
-        rlz_ids = ds['events']['rlz_id'][lbe['event_id']]
-        dic = dict(enumerate(lbe['loss'].T))  # lti -> losses
-        df = pandas.DataFrame(dic, rlz_ids)
+        df = ds.read_df('event_loss_table/,', 'event_id')
+        rlz_ids = ds['events']['rlz_id'][df.index]
         for r, losses_df in df.groupby(rlz_ids):
             losses = numpy.array(losses_df)
             curves = builder.build_curves(losses, r),

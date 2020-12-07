@@ -264,16 +264,21 @@ class EbrCalculator(base.RiskCalculator):
         oq = self.oqparam
         loss_types = oq.loss_dt().names
         logging.info('Saving event loss table')
-        elt_dt = numpy.dtype(
-            [('event_id', U32), ('rlzi', U16), ('loss', (F32, (self.L,)))])
+        E = len(self.events),
         with self.monitor('saving event loss table', measuremem=True):
-            agglosses = numpy.fromiter(
-                ((eid, rlz, losses)
-                 for (eid, rlz), losses in zip(self.events, self.agglosses)
-                 if losses.any()), elt_dt)
-            self.datastore['event_loss_table/,'] = agglosses
-            self.datastore.set_attrs(
-                'event_loss_table/,', loss_types=loss_types)
+            cols = ('event_id',) + loss_types
+            for i, col in enumerate(cols):
+                if col == 'event_id':
+                    dset = self.datastore.create_dset(
+                        'event_loss_table/,/' + col, U32, E)
+                    dset[:] = self.events['id']
+                else:
+                    dset = self.datastore.create_dset(
+                        'event_loss_table/,/' + col, F64, E)
+                    dset[:] = self.agglosses[:, i - 1]
+            self.datastore.set_attrs('event_loss_table/,',
+                                     __pdcolumns__=' '.join(cols))
+
         if oq.avg_losses:
             set_rlzs_stats(self.datastore, 'avg_losses',
                            asset_id=self.assetcol['id'],

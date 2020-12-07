@@ -196,11 +196,16 @@ class EbriskCalculator(event_based.EventBasedCalculator):
             logging.warning('The calculation is really big; consider setting '
                             'minimum_asset_loss')
 
-        elt_dt = [('event_id', U32), ('loss', (F32, (L,)))]
         for idxs, attrs in get_pairs(self.assetcol.tagcol, oq.aggregate_by):
             idx = ','.join(map(str, idxs)) + ','
-            self.datastore.create_dset('event_loss_table/' + idx, elt_dt,
-                                       attrs=attrs)
+            for loss_name in oq.loss_names:
+                tbl = 'event_loss_table/%s/%s' % (idx, loss_name)
+                self.datastore.create_dset(tbl, F64)
+            self.datastore.create_dset(
+                'event_loss_table/%s/event_id' % idx, U32)
+            attrs['__pdcolumns__'] = 'event_id ' + ' '.join(oq.loss_names)
+            self.datastore.set_attrs('event_loss_table/' + idx, **attrs)
+
         self.param.pop('oqparam', None)  # unneeded
         self.datastore.create_dset('avg_losses-stats', F32, (A, 1, L))  # mean
         elt_nbytes = 4 * self.E * L
@@ -265,8 +270,13 @@ class EbriskCalculator(event_based.EventBasedCalculator):
         self.oqparam.ground_motion_fields = False  # hack
         with self.monitor('saving losses_by_event and event_loss_table'):
             for idx, df in dic['alt'].items():
-                import pdb; pdb.set_trace()
-                hdf5.extend(self.datastore['event_loss_table/' + idx], arr)
+                for col in df.columns:
+                    key = 'event_loss_table/%s/%s' % (idx, col)
+                    hdf5.extend(self.datastore[key], df[col].to_numpy())
+                hdf5.extend(
+                    self.datastore['event_loss_table/%s/event_id' % idx],
+                    U32(df.index))
+
         if self.oqparam.avg_losses:
             with self.monitor('saving avg_losses'):
                 self.datastore['avg_losses-stats'][:, 0] += dic['losses_by_A']
