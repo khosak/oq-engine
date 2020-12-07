@@ -223,8 +223,7 @@ class ScenarioDamageCalculator(base.RiskCalculator):
         # consequence distributions
         del result['d_asset']
         del result['d_event']
-        dtlist = [('event_id', U32), ('rlz_id', U16), ('loss', (F32, (L,)))]
-        rlz = self.datastore['events']['rlz_id']
+        dtlist = [('event_id', U32), ('loss', (F32, (L,)))]
         for name, csq in result.items():
             if name.startswith('avg_'):
                 c_asset = numpy.zeros((A, R, L), F32)
@@ -237,7 +236,7 @@ class ScenarioDamageCalculator(base.RiskCalculator):
             elif name.endswith('_by_event'):
                 arr = numpy.zeros(len(csq), dtlist)
                 for i, (eid, loss) in enumerate(csq.items()):
-                    arr[i] = (eid, rlz[eid], loss)
+                    arr[i] = (eid, loss)
                 self.datastore[name] = arr
 
     def sanity_check(self):

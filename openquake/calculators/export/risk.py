@@ -233,15 +233,16 @@ def export_losses_by_event(ekey, dstore):
         columns['rup_id'] = lambda rec: events[rec.event_id]['rup_id']
         columns['year'] = lambda rec: events[rec.event_id]['year']
     try:
-        lbe = dstore['event_loss_table/,'][()]
+        lbe = dstore.read_df('event_loss_table/,', 'event_id')
     except KeyError:  # scenario_damage + consequences
-        lbe = dstore['losses_by_event'][()]
-    lbe.sort(order='event_id')
+        lbe = dstore.read_df('losses_by_event', 'event_id')
+    lbe = lbe.sort_values('event_id')
+    losses = numpy.array(lbe)
     dic = dict(shape_descr=['event_id'])
-    dic['event_id'] = list(lbe['event_id'])
+    dic['event_id'] = list(lbe.index)
     # example (0, 1, 2, 3) -> (0, 2, 3, 1)
-    axis = [0] + list(range(2, len(lbe['loss'].shape))) + [1]
-    data = lbe['loss'].transpose(axis)  # shape (E, T..., L)
+    axis = [0] + list(range(2, len(losses.shape))) + [1]
+    data = losses.transpose(axis)  # shape (E, T..., L)
     aw = hdf5.ArrayWrapper(data, dic, oq.loss_names)
     table = add_columns(aw.to_table(), **columns)
     writer.save(table, dest, comment=md)

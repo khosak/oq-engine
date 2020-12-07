@@ -332,8 +332,8 @@ def _portfolio_loss(dstore):
     rlzs = dstore['events']['rlz_id'][df.index]
     L = len(df.columns)
     data = numpy.zeros((R, L), F32)
-    for row, rlz in zip(df, rlzs):
-        data[rlz] += row.to_numpy()
+    for row, rlz in zip(df.to_numpy(), rlzs):
+        data[rlz] += row
     return data
 
 
